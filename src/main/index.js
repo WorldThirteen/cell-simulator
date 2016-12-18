@@ -23,7 +23,7 @@ export default class MainController {
 			});
 
 		this.options = {
-			visibleUnit: 1,
+			visibleUnit: 'HS',
 			populationSize: 10
 		}
 
@@ -95,25 +95,30 @@ export default class MainController {
 
 	draw() {
 
-		let toDraw;
+		this.drawer.drawFrame(this.current[ this.getViewebleUnitIndex() ]);
+
+	}
+
+	getViewebleUnitIndex() {
+
 		if (this.options.visibleUnit === 'HS') {
-			toDraw = this.current
+			const i = this.current
 				.filter(u => u.units[0].life > 0)
 				.sort((a, b) => {
 
-				if (a.units[0].score > b.units[0].score) {
-					return -1;
-				}
-				if (a.units[0].score < b.units[0].score) {
-					return 1;
-				}
-				return 0;
+					if (a.units[0].score > b.units[0].score) {
+						return -1;
+					}
+					if (a.units[0].score < b.units[0].score) {
+						return 1;
+					}
+					return 0;
 
-			})[ 0 ];
-		} else {
-			toDraw = this.current[ this.options.visibleUnit - 1 ]
+				})[ 0 ];
+			return this.current.indexOf(i);
 		}
-		this.drawer.drawFrame(toDraw);
+
+		return this.options.visibleUnit - 1;
 
 	}
 
@@ -137,7 +142,11 @@ export default class MainController {
 	step() {
 
 		this.current = this.simulator.step();
-		this.ui.update(this.current.map(u => u.units[0], this.options.visibleUnit));
+		this.ui.update(
+			this.current.map(u => u.units[0]),
+			this.options.visibleUnit,
+			this.getViewebleUnitIndex()
+		);
 		if (this.current.map(u => u.end).indexOf(false) === -1) {
 
 			this.pause();

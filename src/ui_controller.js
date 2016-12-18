@@ -33,19 +33,24 @@ class UIController {
 
 	}
 	
-	update(obj, visible) {
+	update(obj, visible, highlight) {
 
 		const cont = document.querySelector('#buttons_cont');
 		if (cont) {
 			obj.map((o, key) => {
 				const c = cont.children[key];
 				const life = Math.max(Math.min(o.life, 100), 0);
-				c.children[ 0 ].style.color = visible === key + 1 ? 'green' : 'black';
-				c.children[ 0 ].style.fontWeight = visible === key + 1 ? 'bold' : 'normal';
-				c.children[ 1 ].style.height = `${life / 2}px`;
-				const color = `rgb(${Math.round(255 - (life / 100 * 255))}, ${Math.round(life / 100 * 255)}, 0)`;
-				c.children[ 1 ].style.backgroundColor = color;
-				c.children[ 1 ].innerHTML = o.score;
+				const btn = c.children[ 0 ];
+				const graph = c.children[ 1 ];
+				const color = `rgb(${
+					Math.round(255 - (life / 100 * 255))
+					}, ${Math.round(life / 100 * 255)}, 0)`;
+				btn.style.color = visible === key + 1 ? 'green' : 'black';
+				btn.style.fontWeight = visible === key + 1 ? 'bold' : 'normal';
+				btn.style.backgroundColor = highlight === key ? 'lightblue' : 'transparent';
+				graph.style.height = `${life / 2}px`;
+				graph.style.backgroundColor = color;
+				graph.innerHTML = o.score;
 			});
 		}
 		
