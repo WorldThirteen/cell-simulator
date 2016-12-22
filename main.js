@@ -61,7 +61,7 @@
 	
 	var _main2 = _interopRequireDefault(_main);
 	
-	var _ui_controller = __webpack_require__(11);
+	var _ui_controller = __webpack_require__(12);
 	
 	var _ui_controller2 = _interopRequireDefault(_ui_controller);
 	
@@ -206,6 +206,10 @@
 	
 	var _vec2 = _interopRequireDefault(_vec);
 	
+	var _evolve = __webpack_require__(11);
+	
+	var _evolve2 = _interopRequireDefault(_evolve);
+	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -218,20 +222,26 @@
 			this.ui = opts.ui;
 			this.ui.setCallback(this.actionHandler.bind(this));
 	
-			this.population = [];
 			this.simulator = new _simulator2.default();
-			this.food = new Array(Math.round(Math.random() * 100)).fill(null).map(function () {
-	
-				return new _vec2.default(Math.random() * 800, Math.random() * 400);
-			});
+			this.generateFood();
 	
 			this.options = {
 				visibleUnit: 'HS',
-				populationSize: 10
+				populationSize: 10,
+				speed: 0
 			};
+	
+			this.evolver = new _evolve2.default({
+				populationSize: this.options.populationSize,
+				numberOfGenes: 450,
+				numberOfWinners: 3,
+				genesToMutate: 200,
+				mutationRate: 0.25
+			});
 	
 			this.current = [];
 			this.status = 'paused';
+			this.populationNum = 0;
 	
 			this.init();
 		}
@@ -249,9 +259,14 @@
 						if (typeof value.visibleUnit != 'undefined') {
 	
 							this.draw();
-							this.ui.update(this.current.map(function (u) {
-								return u.units[0];
-							}, this.options.visibleUnit));
+							this.ui.update({
+								units: this.current.map(function (u) {
+									return u.units[0];
+								}),
+								visible: this.options.visibleUnit,
+								highlight: this.getViewebleUnitIndex(),
+								populationNum: this.populationNum
+							});
 						}
 						break;
 	
@@ -267,28 +282,63 @@
 				}
 			}
 		}, {
-			key: 'init',
-			value: function init(t) {
+			key: 'generateFood',
+			value: function generateFood() {
 	
-				this.population = new Array(this.options.populationSize).fill(null).map(function () {
+				this.food = new Array(Math.round(Math.random() * 100)).fill(null).map(function () {
+	
+					return new _vec2.default(Math.random() * 800, Math.random() * 400);
+				});
+			}
+		}, {
+			key: 'toMatrix',
+			value: function toMatrix(data, row) {
+	
+				var matrix = [];
+				for (var i = 0; i < data.length; i += row) {
+					matrix.push(data.slice(i, i + row));
+				}
+				return matrix;
+			}
+		}, {
+			key: 'toUnits',
+			value: function toUnits(population) {
+				var _this = this;
+	
+				return population.map(function (u) {
+	
 					return {
 						x: 400,
 						y: 200,
-						weights: [new Array(15).fill(null).map(function () {
-							return new Array(15).fill(null).map(function () {
-								return Math.random();
-							});
-						}), new Array(15).fill(null).map(function () {
-							return new Array(15).fill(null).map(function () {
-								return Math.random();
-							});
-						})]
+						weights: [_this.toMatrix(u.slice(0, u.length / 2), 15), _this.toMatrix(u.slice(u.length / 2, u.length), 15)]
 					};
 				});
+			}
+		}, {
+			key: 'init',
+			value: function init() {
 	
-				this.simulator.init(this.population, this.food);
+				this.evolver.initRandomPopulation();
 				this.ui.init(this);
-				this.start(t);
+				this.initRound();
+			}
+		}, {
+			key: 'initRound',
+			value: function initRound() {
+	
+				var population = this.toUnits(this.evolver.population);
+	
+				this.simulator.init(population, this.food);
+				this.start(this.options.speed);
+			}
+		}, {
+			key: 'evolve',
+			value: function evolve() {
+	
+				this.evolver.evolve(this.current.map(function (u) {
+					return u.score;
+				}));
+				this.populationNum++;
 			}
 		}, {
 			key: 'draw',
@@ -320,14 +370,17 @@
 			}
 		}, {
 			key: 'start',
-			value: function start(t) {
-				var _this = this;
+			value: function start() {
+				var _this2 = this;
+	
+				var t = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 10;
+	
 	
 				this.status = 'started';
 				clearInterval(this.interval);
 				this.interval = setInterval(function () {
-					_this.step();
-				}, t || 10);
+					_this2.step();
+				}, t);
 			}
 		}, {
 			key: 'pause',
@@ -340,18 +393,33 @@
 			key: 'step',
 			value: function step() {
 	
-				this.current = this.simulator.step();
-				this.ui.update(this.current.map(function (u) {
-					return u.units[0];
-				}), this.options.visibleUnit, this.getViewebleUnitIndex());
-				if (this.current.map(function (u) {
-					return u.end;
-				}).indexOf(false) === -1) {
+				try {
+	
+					this.current = this.simulator.step();
+					this.ui.update({
+						units: this.current.map(function (u) {
+							return u.units[0];
+						}),
+						visible: this.options.visibleUnit,
+						highlight: this.getViewebleUnitIndex(),
+						populationNum: this.populationNum
+					});
+					if (this.current.map(function (u) {
+						return u.end;
+					}).indexOf(false) === -1) {
+	
+						this.pause();
+						this.evolve();
+						this.generateFood();
+						this.initRound();
+					} else {
+	
+						this.draw();
+					}
+				} catch (err) {
 	
 					this.pause();
-				} else {
-	
-					this.draw();
+					console.log(err);
 				}
 			}
 		}]);
@@ -560,7 +628,7 @@
 	
 				if (diff < 0.1 && diff > 0) {
 					this.rooms[key].unit.life -= 0.5 - diff;
-				} else if (diff === 0) {
+				} else if (diff < 0.001) {
 					this.rooms[key].unit.life -= 1;
 				}
 	
@@ -1396,6 +1464,146 @@
 /* 11 */
 /***/ function(module, exports) {
 
+	"use strict";
+	
+	Object.defineProperty(exports, "__esModule", {
+		value: true
+	});
+	
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+	
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+	
+	var _class, _temp;
+	
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+	
+	var Evolver = (_temp = _class = function () {
+		function Evolver(params) {
+			_classCallCheck(this, Evolver);
+	
+			this.params = _extends({}, Evolver.DEFAULT_CONFIG, params);
+	
+			this.population = null;
+		}
+	
+		_createClass(Evolver, [{
+			key: "initRandomPopulation",
+			value: function initRandomPopulation() {
+	
+				var population = [];
+				var _params = this.params,
+				    populationSize = _params.populationSize,
+				    numberOfGenes = _params.numberOfGenes;
+	
+	
+				for (var unit = 0; unit < populationSize; unit++) {
+	
+					var genes = [];
+	
+					for (var gen = 0; gen < numberOfGenes; gen++) {
+	
+						genes.push(Math.random());
+					}
+	
+					population.push(genes);
+				}
+	
+				this.population = population;
+			}
+		}, {
+			key: "cross",
+			value: function cross(genome1, genome2) {
+	
+				var genomes = [genome1, genome2];
+				var child = [];
+	
+				for (var i = 0; i < this.params.numberOfGenes; i++) {
+					child.push(genomes[Math.round(Math.random())][i]);
+				}
+				return child;
+			}
+		}, {
+			key: "select",
+			value: function select(marks) {
+	
+				var marked = this.population.map(function (unit, key) {
+					return { unit: unit, mark: marks[key] };
+				});
+				marked.sort(function (a, b) {
+	
+					if (a.mark > b.mark) {
+						return -1;
+					}
+					if (a.mark < b.mark) {
+						return 1;
+					}
+	
+					return 0;
+				});
+	
+				return marked.slice(0, this.params.numberOfWinners);
+			}
+		}, {
+			key: "crossing",
+			value: function crossing(parents) {
+	
+				parents = parents.map(function (obj) {
+					return obj.unit;
+				});
+				var res = parents;
+				var counter = 1;
+				var _l = parents.length;
+				while (res.length < this.params.populationSize) {
+	
+					var parent1 = parents[_l - counter % _l - 1];
+					var parent2 = parents[_l - (counter + 1) % _l - 1];
+					var child = this.cross(parent1, parent2);
+					res.push(child);
+					counter++;
+				}
+				return res;
+			}
+		}, {
+			key: "mutate",
+			value: function mutate(prepopulation) {
+				var _this = this;
+	
+				return prepopulation.map(function (genome) {
+	
+					for (var i = 0; i < _this.params.genesToMutate; i++) {
+	
+						var at = Math.round(Math.random() * genome.length - 1);
+						genome[at] += _this.params.mutationRate * (Math.random() > 0.5 ? 1 : -1);
+					}
+	
+					return genome;
+				});
+			}
+		}, {
+			key: "evolve",
+			value: function evolve(marks) {
+	
+				this.population = this.mutate(this.crossing(this.select(marks)));
+	
+				return this.population;
+			}
+		}]);
+	
+		return Evolver;
+	}(), _class.DEFAULT_CONFIG = {
+		populationSize: 10,
+		numberOfGenes: 10,
+		numberOfWinners: 2,
+		genesToMutate: 1,
+		mutationRate: 0.05
+	}, _temp);
+	exports.default = Evolver;
+
+/***/ },
+/* 12 */
+/***/ function(module, exports) {
+
 	'use strict';
 	
 	Object.defineProperty(exports, "__esModule", {
@@ -1421,6 +1629,7 @@
 					return u.unit;
 				}));
 				this.putPlayPause();
+				this.putPopulationNum(obj.populationNum);
 			}
 		}, {
 			key: 'setCallback',
@@ -1439,11 +1648,17 @@
 			}
 		}, {
 			key: 'update',
-			value: function update(obj, visible, highlight) {
+			value: function update(_ref) {
+				var units = _ref.units,
+				    visible = _ref.visible,
+				    highlight = _ref.highlight,
+				    populationNum = _ref.populationNum;
+	
 	
 				var cont = document.querySelector('#buttons_cont');
+				var pop = document.querySelector('#num');
 				if (cont) {
-					obj.map(function (o, key) {
+					units.map(function (o, key) {
 						var c = cont.children[key];
 						var life = Math.max(Math.min(o.life, 100), 0);
 						var btn = c.children[0];
@@ -1456,6 +1671,9 @@
 						graph.style.backgroundColor = color;
 						graph.innerHTML = o.score;
 					});
+				}
+				if (pop) {
+					pop.innerHTML = 'Population: ' + populationNum;
 				}
 			}
 		}, {
@@ -1545,6 +1763,20 @@
 				};
 	
 				document.body.appendChild(btn);
+			}
+		}, {
+			key: 'putPopulationNum',
+			value: function putPopulationNum(num) {
+	
+				var inf = document.createElement('div');
+				inf.id = 'num';
+				inf.innerHTML = 'Population: ' + num;
+				this.setStyle(inf, {
+					width: '100px',
+					margin: '20px auto'
+				});
+	
+				document.body.appendChild(inf);
 			}
 		}]);
 	
