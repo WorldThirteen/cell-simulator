@@ -14,6 +14,7 @@ class UIController {
 			obj.current.map(u => u.unit)
 		);
 		this.putPlayPause();
+		this.putPopulationNum(obj.populationNum);
 
 	}
 
@@ -33,11 +34,12 @@ class UIController {
 
 	}
 	
-	update(obj, visible, highlight) {
+	update({ units, visible, highlight, populationNum }) {
 
 		const cont = document.querySelector('#buttons_cont');
+		const pop = document.querySelector('#num');
 		if (cont) {
-			obj.map((o, key) => {
+			units.map((o, key) => {
 				const c = cont.children[key];
 				const life = Math.max(Math.min(o.life, 100), 0);
 				const btn = c.children[ 0 ];
@@ -52,6 +54,9 @@ class UIController {
 				graph.style.backgroundColor = color;
 				graph.innerHTML = o.score;
 			});
+		}
+		if (pop) {
+			pop.innerHTML = `Population: ${populationNum}`;
 		}
 		
 	}
@@ -139,6 +144,20 @@ class UIController {
 		}
 
 		document.body.appendChild(btn);
+
+	}
+
+	putPopulationNum(num) {
+
+		const inf = document.createElement('div');
+		inf.id = 'num';
+		inf.innerHTML = `Population: ${num}`;
+		this.setStyle(inf, {
+			width: '100px',
+			margin: '20px auto',
+		});
+
+		document.body.appendChild(inf);
 
 	}
 

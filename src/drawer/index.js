@@ -1,5 +1,3 @@
-import Vec2 from '../math/vec2';
-
 export default class CanvasDrawer {
 
 	constructor(canvas) {
@@ -13,14 +11,14 @@ export default class CanvasDrawer {
 
 	}
 
-	drawSmallPoint(coords, radius, color) {
-
-		this.ctx.fillStyle = color;
-		this.ctx.beginPath();
-		this.ctx.arc(coords.x, coords.y, radius, 0, Math.PI * 2, false);
-		this.ctx.fill();
-
-	}
+	// drawSmallPoint(coords, radius, color) {
+	//
+	// 	this.ctx.fillStyle = color;
+	// 	this.ctx.beginPath();
+	// 	this.ctx.arc(coords.x, coords.y, radius, 0, Math.PI * 2, false);
+	// 	this.ctx.fill();
+	//
+	// }
 
 	drawCanvasLine(source, end, color) {
 

@@ -201,7 +201,7 @@ export default class Simulator {
 
 		if (diff < 0.1 && diff > 0) {
 			this.rooms[ key ].unit.life -= 0.5 - diff;
-		} else if (diff === 0) {
+		} else if (diff < 0.001) {
 			this.rooms[ key ].unit.life -= 1;
 		}
 
