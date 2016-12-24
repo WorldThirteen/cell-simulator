@@ -1,5 +1,6 @@
 import Net from '../neuro_net/network';
 import Vec2 from '../math/vec2';
+import { PARTS_NUM, UNIT_RAD, FOOD_RAD, LINE_LENGTH } from '../constants/world';
 
 const NETWORK_PARAMS = (weights) => {
 	return {
@@ -30,7 +31,7 @@ export default class Simulator {
 	}
 
 	init(units, foods) {
-
+		
 		this.rooms = units.map(u => {
 			return {
 				unit: {
@@ -41,7 +42,7 @@ export default class Simulator {
 					fine: 0,
 					prevMovement: new Vec2(0, 0)
 				},
-				foods: foods.map(food => food)
+				foods: foods.map(food => new Vec2(food))
 			}
 		});
 

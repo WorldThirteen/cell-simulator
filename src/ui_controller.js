@@ -15,7 +15,7 @@ class UIController {
 		);
 		this.putPlayPause();
 		this.setPopulationNum(obj.populationNum);
-		this.putOptions(obj.evolver.params);
+		this.putOptions(obj.evolver.params, obj.options);
 
 	}
 
@@ -150,16 +150,26 @@ class UIController {
 
 	}
 
-	putOptions(options) {
+	putOptions(options, root_opt) {
 
 		const pop_size = document.querySelector('#pop_size');
 		const num_win = document.querySelector('#num_win');
 		const mut_num = document.querySelector('#mut_num');
 		const mut_rate = document.querySelector('#mut_rate');
+		const select_fps = document.querySelector('#select_fps');
+		const speed = document.querySelector('#speed');
 		pop_size.value = options.populationSize;
 		num_win.value = options.numberOfWinners;
 		mut_num.value = options.genesToMutate;
 		mut_rate.value = options.mutationRate * 100;
+		select_fps.value = root_opt.FPS;
+		speed.value = root_opt.speed;
+		speed.onchange = (e) => {
+			this.callback('options', { speed: parseInt(e.target.value) });
+		};
+		select_fps.onchange = (e) => {
+			this.callback('options', { FPS: parseInt(e.target.value) });
+		};
 		pop_size.onchange = (e) => {
 			num_win.max = e.target.value;
 			if (num_win.value > e.target.value) {

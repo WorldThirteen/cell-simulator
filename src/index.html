@@ -44,8 +44,25 @@
 
     </div>
     <div id="info_container">
+
         <div id="play_btn" style="cursor: pointer;">
             Play/Pause
+        </div>
+        <div>
+            <label for="pop_size">FPS: </label>
+            <select name="select_fps" id="select_fps">
+                <option value="0">0</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+            </select>
+        </div>
+        <div>
+            <label for="pop_size">Speed: </label>
+            <select name="speed" id="speed">
+                <option value="100">1</option>
+                <option value="10">10</option>
+                <option value="0">10000000000 Kill your CPU</option>
+            </select>
         </div>
         <div id="population_num">
             Population: 0
@@ -54,11 +71,11 @@
     <div id="form_options">
         <div>
             <label for="pop_size">Population size: </label>
-            <input id="pop_size" min="1" max="50" type="number">
+            <input id="pop_size" min="1" max="25" type="number">
         </div>
         <div>
             <label for="num_win">Number of winners: </label>
-            <input id="num_win" min="1" max="50" type="number">
+            <input id="num_win" min="1" max="25" type="number">
         </div>
         <div>
             <label for="mut_num">Genes to mutate: </label>

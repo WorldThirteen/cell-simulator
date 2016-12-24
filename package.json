@@ -38,5 +38,8 @@
     "webpack-dev-middleware": "^1.8.3",
     "webpack-dev-server": "^1.16.1",
     "webpack-hot-middleware": "^2.12.2"
+  },
+  "dependencies": {
+    "worker-loader": "^0.7.1"
   }
 }

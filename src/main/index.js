@@ -1,6 +1,7 @@
 import World from '../simulator';
 import Vec2 from '../math/vec2';
 import Evolver from '../evolve';
+import SimulatorWorker from 'worker-loader!../workers/simulator_worker';
 
 export default class MainController {
 
@@ -16,7 +17,8 @@ export default class MainController {
 		this.options = {
 			visibleUnit: 'HS',
 			populationSize: 10,
-			speed: 0,
+			speed: 10,
+			FPS: 60,
 		}
 
 		this.evolver = new Evolver({
@@ -28,8 +30,10 @@ export default class MainController {
 		});
 
 		this.current = [];
+		this.workers = [];
 		this.status = 'paused';
 		this.populationNum = 0;
+		this.prevFrame = 0;
 
 		this.init();
 
@@ -42,27 +46,20 @@ export default class MainController {
 			case 'options':
 
 				this.options = Object.assign(this.options, value);
-
-				if (typeof value.visibleUnit != 'undefined') {
-
-					this.draw();
-					this.ui.update({
-						units: this.current.map(u => u.units[0]),
-						visible: this.options.visibleUnit,
-						highlight: this.getViewebleUnitIndex(),
-						populationNum: this.populationNum
-					});
-
+				if (typeof value.speed !== 'undefined') {
+					
+					this.setSpeed();
+					
 				}
 				break;
 
 			case 'play':
 
-				if (this.status == 'paused') {
-					this.start();
-				} else if (this.status == 'started') {
-					this.pause();
-				}
+				// if (this.status == 'paused') {
+				// 	this.start();
+				// } else if (this.status == 'started') {
+				// 	this.pause();
+				// }
 				break;
 			
 			case 'form_options':
@@ -124,15 +121,17 @@ export default class MainController {
 		this.evolver.initRandomPopulation();
 		this.ui.init(this);
 		this.initRound();
+
+		requestAnimationFrame(::this.frameHandler);
+
 	}
 
 	initRound() {
 
 		const population = this.toUnits(this.evolver.population);
+		this.generateFood();
 
-		this.simulator.init(population, this.food);
-		this.start(this.options.speed);
-
+		this.initWorkers(population, this.food);
 	}
 
 	evolve() {
@@ -144,8 +143,108 @@ export default class MainController {
 
 	draw() {
 
-		this.drawer.drawFrame(this.current[ this.getViewebleUnitIndex() ]);
+		const u = this.current[ this.getViewebleUnitIndex() ];
+		if (u) {
+			this.drawer.drawFrame(u);
+		}
 
+	}
+
+	initWorkers(units, food) {
+
+		if (units.length < this.workers.length) {
+			this.workers.map((w, key) => {
+				if (key >= units.length) {
+					w.terminate();
+				}
+			});
+		}
+
+		units.map((u, i) => {
+
+			if (!this.workers[ i ]) {
+
+				this.workers[ i ] = new SimulatorWorker();
+				this.workers[ i ].addEventListener('message', (e) => {
+					if (e.data.type === 'STEP_SUCCESS') {
+						this.current[ i ] = e.data.unit;
+					}
+					this.checkEnd();
+				});
+
+			}
+
+			this.workers[ i ].postMessage({
+				type: 'INIT',
+				population: [u],
+				food,
+				delay: this.options.speed
+			});
+
+		});
+
+	}
+
+	checkEnd() {
+
+		if (this.current.map(u => u.end).indexOf(false) === -1) {
+
+			this.evolve();
+			if (this.options.FPS === 0) {
+				this.updateUI();
+			}
+			this.initRound();
+
+		}
+
+	}
+
+	updateUI() {
+
+		this.ui.update({
+			units: this.current.map(u => u.units[0]),
+			visible: this.options.visibleUnit,
+			highlight: this.getViewebleUnitIndex(),
+			populationNum: this.populationNum
+		});
+
+	}
+
+	frameHandler() {
+
+		requestAnimationFrame(::this.frameHandler);
+
+		if (Date.now() - this.prevFrame > 1000 / this.options.FPS) {
+
+			try {
+
+				if (Date.now() % 2 === 0) {
+
+					this.updateUI();
+
+				}
+				this.draw();
+
+			} catch (err) {
+
+				console.log(err);
+
+			}
+
+			this.prevFrame = Date.now();
+
+		}
+
+	}
+
+	setSpeed() {
+		
+		this.workers.map(w => {
+			
+			w.postMessage({ type: 'CHANGE_DELAY', delay: this.options.speed });
+			
+		});
+		
 	}
 
 	getViewebleUnitIndex() {
@@ -168,56 +267,6 @@ export default class MainController {
 		}
 
 		return this.options.visibleUnit - 1;
-
-	}
-
-	start(t = 10) {
-
-		this.status = 'started';
-		clearInterval(this.interval);
-		this.interval = setInterval(() => {
-			this.step();
-		}, t);
-
-	}
-
-	pause() {
-
-		this.status = 'paused';
-		clearInterval(this.interval);
-
-	}
-
-	step() {
-
-		try {
-
-			this.current = this.simulator.step();
-			this.ui.update({
-				units: this.current.map(u => u.units[0]),
-				visible: this.options.visibleUnit,
-				highlight: this.getViewebleUnitIndex(),
-				populationNum: this.populationNum
-			});
-			if (this.current.map(u => u.end).indexOf(false) === -1) {
-
-				this.pause();
-				this.evolve();
-				this.generateFood();
-				this.initRound();
-
-			} else {
-
-				this.draw();
-
-			}
-
-		} catch (err) {
-
-			this.pause();
-			console.log(err);
-
-		}
 
 	}
 
