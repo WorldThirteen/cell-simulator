@@ -37,7 +37,9 @@ export default class Simulator {
 					...u,
 					score: 0,
 					mind: new Net(NETWORK_PARAMS(u.weights)),
-					life: 100
+					life: 100,
+					fine: 0,
+					prevMovement: new Vec2(0, 0)
 				},
 				foods: foods.map(food => food)
 			}
@@ -196,20 +198,39 @@ export default class Simulator {
 			.max(new Vec2(800 - UNIT_RAD, 400 - UNIT_RAD))
 			.min(new Vec2(0 + UNIT_RAD, 0 + UNIT_RAD));
 
-		const diff = Math.abs(this.rooms[ key ].unit.x - coords.x)
-			+ Math.abs(this.rooms[ key ].unit.y - coords.y);
+		this.rooms[ key ].unit = this.checkMovement(this.rooms[ key ].unit, x, y, coords);
 
-		if (diff < 0.1 && diff > 0) {
-			this.rooms[ key ].unit.life -= 0.5 - diff;
-		} else if (diff < 0.001) {
-			this.rooms[ key ].unit.life -= 1;
-		}
-
+		this.rooms[ key ].unit.prevMovement = new Vec2(x, y);
 		this.rooms[ key ].unit.x = coords.x;
 		this.rooms[ key ].unit.y = coords.y;
 
 		return this.rooms[ key ].unit;
 
+	}
+
+	checkMovement(unit, x, y, coords) {
+		const diff = Math.abs(unit.x - coords.x)
+			+ Math.abs(unit.y - coords.y);
+
+		if (new Vec2(x, y).add(unit.prevMovement).length <= 0.05) {
+			unit.fine += 1;
+		} else {
+			if (diff < 0.1 && diff > 0.001) {
+				unit.life -= 0.5 - diff;
+			}
+			if (diff < 0.001) {
+				if (unit.fine === 50) {
+					unit.life = 0;
+				} else {
+					unit.fine += 1;
+					unit.life -= 1;
+				}
+			} else {
+				unit.fine = 0;
+			}
+		}
+
+		return unit;
 	}
 
 	checkEat(unit, key) {

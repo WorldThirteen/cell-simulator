@@ -14,7 +14,8 @@ class UIController {
 			obj.current.map(u => u.unit)
 		);
 		this.putPlayPause();
-		this.putPopulationNum(obj.populationNum);
+		this.setPopulationNum(obj.populationNum);
+		this.putOptions(obj.evolver.params);
 
 	}
 
@@ -37,10 +38,13 @@ class UIController {
 	update({ units, visible, highlight, populationNum }) {
 
 		const cont = document.querySelector('#buttons_cont');
-		const pop = document.querySelector('#num');
 		if (cont) {
 			units.map((o, key) => {
-				const c = cont.children[key];
+				let c = cont.children[key];
+				if (!c || key === cont.children.length - 1) {
+					c = this.createElement(key + 1, visible === key);
+					cont.insertBefore(c, cont.children[cont.children.length - 1]);
+				}
 				const life = Math.max(Math.min(o.life, 100), 0);
 				const btn = c.children[ 0 ];
 				const graph = c.children[ 1 ];
@@ -54,11 +58,14 @@ class UIController {
 				graph.style.backgroundColor = color;
 				graph.innerHTML = o.score;
 			});
+			if (units.length < cont.children.length - 1) {
+				for (let i = units.length; i < cont.children.length - 1; i++) {
+					cont.children[ i ].remove();
+				}
+			}
 		}
-		if (pop) {
-			pop.innerHTML = `Population: ${populationNum}`;
-		}
-		
+		this.setPopulationNum(populationNum);
+
 	}
 
 	createElement(i, selected) {
@@ -112,7 +119,6 @@ class UIController {
 
 		const cont = document.createElement('div');
 		cont.id = 'buttons_cont';
-		document.body.appendChild(cont);
 
 		this.setStyle(cont, { textAlign: 'center' });
 
@@ -126,38 +132,50 @@ class UIController {
 			cont.appendChild(el);
 
 		});
+		document.querySelector('#interactive_container').appendChild(cont);
 
 	}
 
 	putPlayPause() {
 
-		const btn = document.createElement('div');
-		btn.id = 'play';
-		btn.innerHTML = 'Play/Pause';
-		this.setStyle(btn, {
-			width: '100px',
-			margin: '20px auto',
-			cursor: 'pointer'
-		});
-		btn.onclick = () => {
+		document.querySelector('#play_btn').onclick = () => {
 			this.callback('play');
 		}
 
-		document.body.appendChild(btn);
+	}
+
+	setPopulationNum(num) {
+
+		document.querySelector('#population_num').innerHTML = `Population: ${num}`;
 
 	}
 
-	putPopulationNum(num) {
+	putOptions(options) {
 
-		const inf = document.createElement('div');
-		inf.id = 'num';
-		inf.innerHTML = `Population: ${num}`;
-		this.setStyle(inf, {
-			width: '100px',
-			margin: '20px auto',
-		});
-
-		document.body.appendChild(inf);
+		const pop_size = document.querySelector('#pop_size');
+		const num_win = document.querySelector('#num_win');
+		const mut_num = document.querySelector('#mut_num');
+		const mut_rate = document.querySelector('#mut_rate');
+		pop_size.value = options.populationSize;
+		num_win.value = options.numberOfWinners;
+		mut_num.value = options.genesToMutate;
+		mut_rate.value = options.mutationRate * 100;
+		pop_size.onchange = (e) => {
+			num_win.max = e.target.value;
+			if (num_win.value > e.target.value) {
+				num_win.value = e.target.value;
+			}
+			this.callback('form_options', { populationSize: e.target.value });
+		};
+		num_win.onchange = (e) => {
+			this.callback('form_options', { numberOfWinners: e.target.value });
+		};
+		mut_num.onchange = (e) => {
+			this.callback('form_options', { genesToMutate: e.target.value });
+		};
+		mut_rate.onchange = (e) => {
+			this.callback('form_options', { mutationRate: e.target.value / 100 });
+		};
 
 	}
 

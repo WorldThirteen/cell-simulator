@@ -3,8 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <title>Evolve</title>
+    <style>
+        html,
+        body {
+            margin: 0px;
+            padding: 0px;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        #info_container,
+        #form_options {
+            display: inline-block;
+            vertical-align: top;
+            width: 49%;
+            line-height: 30px;
+            padding: 0 50px;
+        }
+        input {
+            margin-left: 10px;
+            width: 42px;
+        }
+        input:invalid {
+            outline: 1px red;
+        }
+        label {
+            width: 132px;
+            display: inline-block;
+        }
+    </style>
 </head>
 <body>
-    <canvas id="canvas" width="800px" height="400px" style="border: 1px solid black"></canvas>
+    <canvas
+        id="canvas"
+        width="800px"
+        height="400px"
+        style="border: 1px solid black; margin: 0 auto; display: block;"
+    ></canvas>
+    <div id="interactive_container">
+
+    </div>
+    <div id="info_container">
+        <div id="play_btn" style="cursor: pointer;">
+            Play/Pause
+        </div>
+        <div id="population_num">
+            Population: 0
+        </div>
+    </div>
+    <div id="form_options">
+        <div>
+            <label for="pop_size">Population size: </label>
+            <input id="pop_size" min="1" max="50" type="number">
+        </div>
+        <div>
+            <label for="num_win">Number of winners: </label>
+            <input id="num_win" min="1" max="50" type="number">
+        </div>
+        <div>
+            <label for="mut_num">Genes to mutate: </label>
+            <input id="mut_num" min="1" max="450" type="number">
+        </div>
+        <div>
+            <label for="mut_rate">Mutation rate: </label>
+            <input id="mut_rate" min="1" max="100" type="number">
+        </div>
+    </div>
 </body>
 </html>

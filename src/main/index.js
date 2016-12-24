@@ -64,6 +64,14 @@ export default class MainController {
 					this.pause();
 				}
 				break;
+			
+			case 'form_options':
+
+				if (value.populationSize) {
+					this.options.populationSize = value.populationSize;
+				}
+				this.evolver.params = Object.assign(this.evolver.params, value);
+				break;
 
 		}
 
