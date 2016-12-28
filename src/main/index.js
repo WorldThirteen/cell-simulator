@@ -53,11 +53,7 @@ export default class MainController {
 
 			case 'play':
 
-				// if (this.status == 'paused') {
-				// 	this.start();
-				// } else if (this.status == 'started') {
-				// 	this.pause();
-				// }
+				this.setState(this.status === 'started' ? 'paused' : 'started');
 				break;
 			
 			case 'form_options':
@@ -248,6 +244,18 @@ export default class MainController {
 			
 		});
 		
+	}
+
+	setState(status) {
+
+		this.status = status;
+
+		this.workers.map(w => {
+
+			w.postMessage({ type: 'CHANGE_STATE', state: this.status });
+
+		});
+
 	}
 
 	getViewebleUnitIndex() {

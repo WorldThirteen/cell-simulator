@@ -78,7 +78,7 @@ class SimulatorWorker {
 
 			case 'CHANGE_STATE':
 
-				if (state === 'pause') {
+				if (state === 'paused') {
 					this.pause();
 				} else {
 					this.start();
