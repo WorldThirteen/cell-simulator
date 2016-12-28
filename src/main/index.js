@@ -1,4 +1,3 @@
-import World from '../simulator';
 import Vec2 from '../math/vec2';
 import Evolver from '../evolve';
 import SimulatorWorker from 'worker-loader!../workers/simulator_worker';
@@ -11,7 +10,6 @@ export default class MainController {
 		this.ui = opts.ui;
 		this.ui.setCallback(::this.actionHandler);
 
-		this.simulator = new World();
 		this.generateFood();
 
 		this.options = {
@@ -151,6 +149,11 @@ export default class MainController {
 	}
 
 	initWorkers(units, food) {
+
+		this.current = units.map(u => ({
+			units: [{ ...u, life: 100, lines: [], score: 0 }],
+			food: this.food
+		}));
 
 		if (units.length < this.workers.length) {
 			this.workers.map((w, key) => {
