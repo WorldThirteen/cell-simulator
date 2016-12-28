@@ -61,7 +61,7 @@
 	
 	var _main2 = _interopRequireDefault(_main);
 	
-	var _ui_controller = __webpack_require__(12);
+	var _ui_controller = __webpack_require__(7);
 	
 	var _ui_controller2 = _interopRequireDefault(_ui_controller);
 	
@@ -196,19 +196,21 @@
 	});
 	exports.default = undefined;
 	
+	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+	
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 	
-	var _simulator = __webpack_require__(4);
-	
-	var _simulator2 = _interopRequireDefault(_simulator);
-	
-	var _vec = __webpack_require__(10);
+	var _vec = __webpack_require__(4);
 	
 	var _vec2 = _interopRequireDefault(_vec);
 	
-	var _evolve = __webpack_require__(11);
+	var _evolve = __webpack_require__(5);
 	
 	var _evolve2 = _interopRequireDefault(_evolve);
+	
+	var _simulator_worker = __webpack_require__(6);
+	
+	var _simulator_worker2 = _interopRequireDefault(_simulator_worker);
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
@@ -222,13 +224,13 @@
 			this.ui = opts.ui;
 			this.ui.setCallback(this.actionHandler.bind(this));
 	
-			this.simulator = new _simulator2.default();
 			this.generateFood();
 	
 			this.options = {
 				visibleUnit: 'HS',
 				populationSize: 10,
-				speed: 0
+				speed: 10,
+				FPS: 60
 			};
 	
 			this.evolver = new _evolve2.default({
@@ -240,8 +242,10 @@
 			});
 	
 			this.current = [];
+			this.workers = [];
 			this.status = 'paused';
 			this.populationNum = 0;
+			this.prevFrame = 0;
 	
 			this.init();
 		}
@@ -255,28 +259,23 @@
 					case 'options':
 	
 						this.options = Object.assign(this.options, value);
+						if (typeof value.speed !== 'undefined') {
 	
-						if (typeof value.visibleUnit != 'undefined') {
-	
-							this.draw();
-							this.ui.update({
-								units: this.current.map(function (u) {
-									return u.units[0];
-								}),
-								visible: this.options.visibleUnit,
-								highlight: this.getViewebleUnitIndex(),
-								populationNum: this.populationNum
-							});
+							this.setSpeed();
 						}
 						break;
 	
 					case 'play':
 	
-						if (this.status == 'paused') {
-							this.start();
-						} else if (this.status == 'started') {
-							this.pause();
+						this.setState(this.status === 'started' ? 'paused' : 'started');
+						break;
+	
+					case 'form_options':
+	
+						if (value.populationSize) {
+							this.options.populationSize = value.populationSize;
 						}
+						this.evolver.params = Object.assign(this.evolver.params, value);
 						break;
 	
 				}
@@ -321,15 +320,17 @@
 				this.evolver.initRandomPopulation();
 				this.ui.init(this);
 				this.initRound();
+	
+				requestAnimationFrame(this.frameHandler.bind(this));
 			}
 		}, {
 			key: 'initRound',
 			value: function initRound() {
 	
 				var population = this.toUnits(this.evolver.population);
+				this.generateFood();
 	
-				this.simulator.init(population, this.food);
-				this.start(this.options.speed);
+				this.initWorkers(population, this.food);
 			}
 		}, {
 			key: 'evolve',
@@ -344,7 +345,124 @@
 			key: 'draw',
 			value: function draw() {
 	
-				this.drawer.drawFrame(this.current[this.getViewebleUnitIndex()]);
+				var u = this.current[this.getViewebleUnitIndex()];
+				if (u) {
+					this.drawer.drawFrame(u);
+				}
+			}
+		}, {
+			key: 'initWorkers',
+			value: function initWorkers(units, food) {
+				var _this2 = this;
+	
+				this.current = units.map(function (u) {
+					return {
+						units: [_extends({}, u, { life: 100, lines: [], score: 0 })],
+						food: _this2.food
+					};
+				});
+	
+				if (units.length < this.workers.length) {
+					this.workers.map(function (w, key) {
+						if (key >= units.length) {
+							w.terminate();
+						}
+					});
+				}
+	
+				units.map(function (u, i) {
+	
+					if (!_this2.workers[i]) {
+	
+						_this2.workers[i] = new _simulator_worker2.default();
+						_this2.workers[i].addEventListener('message', function (e) {
+							if (e.data.type === 'STEP_SUCCESS') {
+								_this2.current[i] = e.data.unit;
+							}
+							_this2.checkEnd();
+						});
+					}
+	
+					_this2.workers[i].postMessage({
+						type: 'INIT',
+						population: [u],
+						food: food,
+						delay: _this2.options.speed
+					});
+				});
+			}
+		}, {
+			key: 'checkEnd',
+			value: function checkEnd() {
+	
+				if (this.current.map(function (u) {
+					return u.end;
+				}).indexOf(false) === -1) {
+	
+					this.evolve();
+					if (this.options.FPS === 0) {
+						this.updateUI();
+					}
+					this.initRound();
+				}
+			}
+		}, {
+			key: 'updateUI',
+			value: function updateUI() {
+	
+				this.ui.update({
+					units: this.current.map(function (u) {
+						return u.units[0];
+					}),
+					visible: this.options.visibleUnit,
+					highlight: this.getViewebleUnitIndex(),
+					populationNum: this.populationNum
+				});
+			}
+		}, {
+			key: 'frameHandler',
+			value: function frameHandler() {
+	
+				requestAnimationFrame(this.frameHandler.bind(this));
+	
+				if (Date.now() - this.prevFrame > 1000 / this.options.FPS) {
+	
+					try {
+	
+						if (Date.now() % 2 === 0) {
+	
+							this.updateUI();
+						}
+						this.draw();
+					} catch (err) {
+	
+						console.log(err);
+					}
+	
+					this.prevFrame = Date.now();
+				}
+			}
+		}, {
+			key: 'setSpeed',
+			value: function setSpeed() {
+				var _this3 = this;
+	
+				this.workers.map(function (w) {
+	
+					w.postMessage({ type: 'CHANGE_DELAY', delay: _this3.options.speed });
+				});
+			}
+		}, {
+			key: 'setState',
+			value: function setState(status) {
+				var _this4 = this;
+	
+				this.status = status;
+	
+				this.workers.map(function (w) {
+	
+					w.postMessage({ type: 'CHANGE_STATE', state: _this4.status });
+				});
 			}
 		}, {
 			key: 'getViewebleUnitIndex',
@@ -368,60 +486,6 @@
 	
 				return this.options.visibleUnit - 1;
 			}
-		}, {
-			key: 'start',
-			value: function start() {
-				var _this2 = this;
-	
-				var t = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 10;
-	
-	
-				this.status = 'started';
-				clearInterval(this.interval);
-				this.interval = setInterval(function () {
-					_this2.step();
-				}, t);
-			}
-		}, {
-			key: 'pause',
-			value: function pause() {
-	
-				this.status = 'paused';
-				clearInterval(this.interval);
-			}
-		}, {
-			key: 'step',
-			value: function step() {
-	
-				try {
-	
-					this.current = this.simulator.step();
-					this.ui.update({
-						units: this.current.map(function (u) {
-							return u.units[0];
-						}),
-						visible: this.options.visibleUnit,
-						highlight: this.getViewebleUnitIndex(),
-						populationNum: this.populationNum
-					});
-					if (this.current.map(function (u) {
-						return u.end;
-					}).indexOf(false) === -1) {
-	
-						this.pause();
-						this.evolve();
-						this.generateFood();
-						this.initRound();
-					} else {
-	
-						this.draw();
-					}
-				} catch (err) {
-	
-					this.pause();
-					console.log(err);
-				}
-			}
 		}]);
 	
 		return MainController;
@@ -431,598 +495,6 @@
 
 /***/ },
 /* 4 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-		value: true
-	});
-	exports.default = undefined;
-	
-	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
-	
-	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-	
-	var _network = __webpack_require__(5);
-	
-	var _network2 = _interopRequireDefault(_network);
-	
-	var _vec2 = __webpack_require__(10);
-	
-	var _vec3 = _interopRequireDefault(_vec2);
-	
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-	
-	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-	
-	var NETWORK_PARAMS = function NETWORK_PARAMS(weights) {
-		return {
-			layers: [{
-				weights: weights[0],
-				length: weights[0].length,
-				activateFunction: 'sigmoid'
-			}, {
-				weights: weights[1],
-				length: weights[1].length,
-				activateFunction: 'sigmoid'
-			}]
-		};
-	};
-	
-	var Simulator = function () {
-		function Simulator() {
-			_classCallCheck(this, Simulator);
-	
-			this.rooms = [{
-				units: [],
-				foods: []
-			}];
-		}
-	
-		_createClass(Simulator, [{
-			key: 'init',
-			value: function init(units, foods) {
-	
-				this.rooms = units.map(function (u) {
-					return {
-						unit: _extends({}, u, {
-							score: 0,
-							mind: new _network2.default(NETWORK_PARAMS(u.weights)),
-							life: 100
-						}),
-						foods: foods.map(function (food) {
-							return food;
-						})
-					};
-				});
-			}
-		}, {
-			key: 'findCollisions',
-			value: function findCollisions(source, end, key) {
-	
-				return this.rooms[key].foods.map(function (circlePoint) {
-	
-					var main_vector = end.sub(source);
-	
-					var point = circlePoint.sub(source).project(main_vector);
-					var _vec = point.add(source).sub(circlePoint);
-	
-					var radius = FOOD_RAD;
-					var vec_length = _vec.length;
-					var begintInter = source.sub(circlePoint).length < radius;
-					var endInter = end.sub(circlePoint).length < radius;
-	
-					var isInterruct = vec_length < radius && _vec3.default.DotProduct(point, main_vector) >= 0 && main_vector.length >= point.length;
-					var interSect = isInterruct || begintInter || endInter;
-	
-					if (interSect) {
-	
-						var projectedPoint = point.add(source);
-						var ort = main_vector.multScalar(1 / main_vector.length);
-						var l = Math.sqrt(radius * radius - vec_length * vec_length) * 2;
-	
-						var p1 = projectedPoint.sub(ort.multScalar(l / 2));
-						var p2 = projectedPoint.add(ort.multScalar(l / 2));
-	
-						var filtered = [p1, p2].filter(function (p) {
-							return (p.x >= source.x && p.x <= end.x || p.x <= source.x && p.x >= end.x) && (p.y >= source.y && p.y <= end.y || p.y <= source.y && p.y >= end.y);
-						}).sort(function (a, b) {
-	
-							var _a = _vec3.default.Sub(a, source).length;
-							var _b = _vec3.default.Sub(b, source).length;
-	
-							if (_a > _b) {
-								return 1;
-							}
-	
-							if (_a > _b) {
-								return -1;
-							}
-	
-							return 0;
-						})[0];
-	
-						if (filtered) {
-	
-							return filtered;
-						}
-					}
-	
-					return false;
-				});
-			}
-		}, {
-			key: 'processLine',
-			value: function processLine(start, end, key) {
-	
-				var endPoints = [end].concat(this.findCollisions(start, end, key));
-				var min = end.sub(start).length;
-				var res = end;
-				var active = false;
-				endPoints.map(function (p) {
-	
-					if (p) {
-						var length = p.sub(start).length;
-						if (length < min) {
-							active = true;
-							min = length;
-							res = p;
-						}
-					}
-					return p;
-				});
-				return {
-					from: start,
-					to: res,
-					active: active
-				};
-			}
-		}, {
-			key: 'getUnitLines',
-			value: function getUnitLines(unit, key) {
-	
-				var full = Math.PI * 2;
-				var part = full / PARTS_NUM;
-				var curDeg = -part;
-				var res = [];
-	
-				for (var i = 0; i < PARTS_NUM; i++) {
-	
-					curDeg += part;
-					var vec = new _vec3.default(Math.cos(curDeg), Math.sin(curDeg));
-	
-					res.push(this.processLine(new _vec3.default(unit).add(vec.multScalar(UNIT_RAD)), new _vec3.default(unit).add(vec.multScalar(UNIT_RAD)).add(vec.multScalar(LINE_LENGTH)), key));
-				}
-	
-				return res;
-			}
-		}, {
-			key: 'getUnitSignals',
-			value: function getUnitSignals(lines) {
-	
-				return lines.map(function (line) {
-					return Math.round((LINE_LENGTH - Math.min(line.to.sub(line.from).length, 25)) * 1000) / 1000 / LINE_LENGTH;
-				});
-			}
-		}, {
-			key: 'moveUnit',
-			value: function moveUnit(movement, key) {
-	
-				var full = Math.PI * 2;
-				var part = full / PARTS_NUM;
-				var curDeg = -part;
-				var x = 0;
-				var y = 0;
-	
-				for (var i = 0; i < PARTS_NUM; i++) {
-	
-					curDeg += part;
-					x += movement[i] * Math.cos(curDeg) * 2;
-					y += movement[i] * Math.sin(curDeg) * 2;
-				}
-	
-				var coords = new _vec3.default(this.rooms[key].unit.x + x, this.rooms[key].unit.y + y).max(new _vec3.default(800 - UNIT_RAD, 400 - UNIT_RAD)).min(new _vec3.default(0 + UNIT_RAD, 0 + UNIT_RAD));
-	
-				var diff = Math.abs(this.rooms[key].unit.x - coords.x) + Math.abs(this.rooms[key].unit.y - coords.y);
-	
-				if (diff < 0.1 && diff > 0) {
-					this.rooms[key].unit.life -= 0.5 - diff;
-				} else if (diff < 0.001) {
-					this.rooms[key].unit.life -= 1;
-				}
-	
-				this.rooms[key].unit.x = coords.x;
-				this.rooms[key].unit.y = coords.y;
-	
-				return this.rooms[key].unit;
-			}
-		}, {
-			key: 'checkEat',
-			value: function checkEat(unit, key) {
-				var _this = this;
-	
-				this.rooms[key].foods.map(function (food, _key) {
-	
-					if (_vec3.default.Sub(food, unit).length < UNIT_RAD + FOOD_RAD) {
-	
-						_this.rooms[key].foods.splice(_key, 1);
-						_this.rooms[key].unit.score += 1;
-						_this.rooms[key].unit.life += 40;
-					}
-				});
-	
-				return this.rooms[key].unit.score;
-			}
-		}, {
-			key: 'step',
-			value: function step() {
-				var _this2 = this;
-	
-				return this.rooms.map(function (room, key) {
-	
-					var lines = _this2.getUnitLines(room.unit, key);
-					var score = _this2.rooms[key].unit.score;
-					if (room.unit.life > 0) {
-						var signals = _this2.getUnitSignals(lines);
-						var movement = room.unit.mind.process(signals);
-						var movedUnit = _this2.moveUnit(movement, key);
-						score = _this2.checkEat(movedUnit, key);
-						_this2.rooms[key].unit.life += -0.1;
-					}
-	
-					return {
-						units: [{
-							x: _this2.rooms[key].unit.x,
-							y: _this2.rooms[key].unit.y,
-							radius: UNIT_RAD,
-							lines: lines,
-							score: score,
-							life: _this2.rooms[key].unit.life
-						}],
-						food: _this2.rooms[key].foods,
-						end: _this2.rooms[key].unit.life <= 0
-					};
-				});
-			}
-		}]);
-	
-		return Simulator;
-	}();
-	
-	exports.default = Simulator;
-
-/***/ },
-/* 5 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-		value: true
-	});
-	exports.default = undefined;
-	
-	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
-	
-	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-	
-	var _class, _temp;
-	
-	var _layer = __webpack_require__(6);
-	
-	var _layer2 = _interopRequireDefault(_layer);
-	
-	var _activate_functions = __webpack_require__(9);
-	
-	var _activate_functions2 = _interopRequireDefault(_activate_functions);
-	
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-	
-	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-	
-	var Network = (_temp = _class = function () {
-		function Network(params) {
-			_classCallCheck(this, Network);
-	
-			this.params = _extends({}, Network.defaultParams, params);
-	
-			this.layers = this.params.layers.map(function (p) {
-				return new _layer2.default(p);
-			});
-		}
-	
-		_createClass(Network, [{
-			key: 'addLayer',
-			value: function addLayer(params) {
-	
-				this.layers.push(new _layer2.default(params));
-			}
-		}, {
-			key: 'process',
-			value: function process(input) {
-	
-				if (!this.layers.length) {
-	
-					// return Promise.resolve(null);
-					return null;
-				}
-	
-				// return new Promise((resolve, reject) => {
-	
-				for (var i = 0; i < this.layers.length; i++) {
-	
-					var _in = i == 0 ? input : this.layers[i - 1].signals;
-					this.layers[i].process(_in);
-				}
-	
-				return this.layers[this.layers.length - 1].signals;
-	
-				// });
-			}
-		}]);
-	
-		return Network;
-	}(), _class.defaultParams = {
-		layers: []
-	}, _class.ACTIVATE_FUNCTIONS = _activate_functions2.default, _temp);
-	exports.default = Network;
-
-/***/ },
-/* 6 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-		value: true
-	});
-	exports.default = undefined;
-	
-	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
-	
-	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-	
-	var _class, _temp;
-	
-	var _neuron = __webpack_require__(7);
-	
-	var _neuron2 = _interopRequireDefault(_neuron);
-	
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-	
-	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-	
-	var Layer = (_temp = _class = function () {
-		function Layer(params) {
-			var _this = this;
-	
-			_classCallCheck(this, Layer);
-	
-			this.params = _extends({}, Layer.defaultParams, params);
-	
-			this.neurons = new Array(this.params.length).fill(null).map(function (n, key) {
-				return new _neuron2.default({
-					weights: _this.params.weights[key] || [],
-					domain: _this.params.domain,
-					defaultOut: _this.params.defaultOut,
-					activateFunction: _this.params.activateFunction
-				});
-			});
-	
-			this.out = this.params.defaultOut;
-		}
-	
-		_createClass(Layer, [{
-			key: 'addNeuron',
-			value: function addNeuron(params) {
-	
-				this.neurons.push(new _neuron2.default(_extends({
-					weights: [],
-					domain: this.params.domain,
-					defaultOut: this.params.defaultOut,
-					activateFunction: this.params.activateFunction
-				}, params)));
-			}
-		}, {
-			key: 'process',
-			value: function process(signals) {
-	
-				this.out = this.neurons.map(function (neuron) {
-					return neuron.process(signals);
-				});
-				return this.out;
-			}
-		}, {
-			key: 'signals',
-			get: function get() {
-	
-				return this.out;
-			}
-		}]);
-	
-		return Layer;
-	}(), _class.defaultParams = {
-		weights: [],
-		domain: [0, 1],
-		defaultOut: 0,
-		activateFunction: 'threshold',
-		length: 0
-	}, _temp);
-	exports.default = Layer;
-
-/***/ },
-/* 7 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-		value: true
-	});
-	exports.default = undefined;
-	
-	var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
-	
-	var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
-	
-	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-	
-	var _class, _temp;
-	
-	var _ready_functions = __webpack_require__(8);
-	
-	var _ready_functions2 = _interopRequireDefault(_ready_functions);
-	
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-	
-	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-	
-	var Neuron = (_temp = _class = function () {
-		function Neuron(params) {
-			_classCallCheck(this, Neuron);
-	
-			this.params = _extends({}, Neuron.defaultParams, params);
-	
-			this.activationFunc = Neuron.GetActivationFunc(this.params.activateFunction);
-			this.out = this.params.defaultOut;
-		}
-	
-		_createClass(Neuron, [{
-			key: 'process',
-			value: function process(signals) {
-	
-				this.out = this.activationFunc(this.sum(signals));
-				return this.out;
-			}
-		}, {
-			key: 'sum',
-			value: function sum(signals) {
-	
-				var sum = 0;
-	
-				for (var i = 0; i < signals.length; i++) {
-	
-					var weight = this.params.weights[i];
-	
-					if (!Number.isFinite(weight) || !Number.isFinite(signals[i])) {
-	
-						throw new Error('Signal or weight is not finite: weight ' + weight + ', signal ' + signals[i]);
-					}
-	
-					sum += signals[i] * weight;
-				}
-	
-				return sum;
-			}
-		}, {
-			key: 'signal',
-			get: function get() {
-	
-				return this.out;
-			}
-		}], [{
-			key: 'GetActivationFunc',
-			value: function GetActivationFunc(func) {
-	
-				switch (typeof func === 'undefined' ? 'undefined' : _typeof(func)) {
-	
-					case 'function':
-	
-						return func;
-	
-					case 'string':
-	
-						return _ready_functions2.default[func];
-	
-					default:
-	
-						throw new Error('Neuron\'s \'activateFunction\' param must be a string of function');
-	
-				}
-			}
-		}]);
-	
-		return Neuron;
-	}(), _class.defaultParams = {
-		weights: [],
-		domain: [0, 1],
-		defaultOut: 0,
-		activateFunction: 'threshold'
-	}, _temp);
-	exports.default = Neuron;
-
-/***/ },
-/* 8 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-		value: true
-	});
-	
-	var _activate_functions = __webpack_require__(9);
-	
-	var _activate_functions2 = _interopRequireDefault(_activate_functions);
-	
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-	
-	var functions = {};
-	
-	Object.keys(_activate_functions2.default).map(function (key) {
-	
-		var func = function func() {};
-	
-		switch (key) {
-	
-			case 'threshold':
-	
-				func = _activate_functions2.default[key].bind(null, 0, 1, 0.5);
-	
-			case 'gisterezis':
-	
-				func = _activate_functions2.default[key].bind(null, 0, 1, 0.35, 0.65);
-	
-			case 'sigmoid':
-	
-				func = _activate_functions2.default[key].bind(null, 0, 1, 1);
-	
-		}
-	
-		functions[key] = func;
-	});
-	
-	exports.default = functions;
-
-/***/ },
-/* 9 */
-/***/ function(module, exports) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-		value: true
-	});
-	exports.default = {
-	
-		'threshold': function threshold(min, max, t, s) {
-	
-			return s > t ? max : min;
-		},
-		'gisterezis': function gisterezis(min, max, p1, p2, s) {
-	
-			return s <= p1 ? min : s >= p2 ? max : min + (max - min) * ((s - p1) / (p2 - p1));
-		},
-		'sigmoid': function sigmoid(min, max, A, s) {
-	
-			return 1 / (1 + Math.exp(-A * (s - (max - min) / 2)));
-		}
-	
-	};
-
-/***/ },
-/* 10 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -1461,7 +933,7 @@
 	exports.default = Vec2;
 
 /***/ },
-/* 11 */
+/* 5 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -1601,7 +1073,15 @@
 	exports.default = Evolver;
 
 /***/ },
-/* 12 */
+/* 6 */
+/***/ function(module, exports, __webpack_require__) {
+
+	module.exports = function() {
+		return new Worker(__webpack_require__.p + "a4e38c1823aba5df02bc.worker.js");
+	};
+
+/***/ },
+/* 7 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -1629,7 +1109,8 @@
 					return u.unit;
 				}));
 				this.putPlayPause();
-				this.putPopulationNum(obj.populationNum);
+				this.setPopulationNum(obj.populationNum);
+				this.putOptions(obj.evolver.params, obj.options);
 			}
 		}, {
 			key: 'setCallback',
@@ -1649,6 +1130,8 @@
 		}, {
 			key: 'update',
 			value: function update(_ref) {
+				var _this = this;
+	
 				var units = _ref.units,
 				    visible = _ref.visible,
 				    highlight = _ref.highlight,
@@ -1656,10 +1139,13 @@
 	
 	
 				var cont = document.querySelector('#buttons_cont');
-				var pop = document.querySelector('#num');
 				if (cont) {
 					units.map(function (o, key) {
 						var c = cont.children[key];
+						if (!c || key === cont.children.length - 1) {
+							c = _this.createElement(key + 1, visible === key);
+							cont.insertBefore(c, cont.children[cont.children.length - 1]);
+						}
 						var life = Math.max(Math.min(o.life, 100), 0);
 						var btn = c.children[0];
 						var graph = c.children[1];
@@ -1671,15 +1157,18 @@
 						graph.style.backgroundColor = color;
 						graph.innerHTML = o.score;
 					});
+					if (units.length < cont.children.length - 1) {
+						for (var i = units.length; i < cont.children.length - 1; i++) {
+							cont.children[i].remove();
+						}
+					}
 				}
-				if (pop) {
-					pop.innerHTML = 'Population: ' + populationNum;
-				}
+				this.setPopulationNum(populationNum);
 			}
 		}, {
 			key: 'createElement',
 			value: function createElement(i, selected) {
-				var _this = this;
+				var _this2 = this;
 	
 				var style = {
 					border: '1px solid black',
@@ -1707,7 +1196,7 @@
 				this.setStyle(el, Object.assign({}, style, selected === i ? selStyle : {}));
 				el.innerText = i;
 				el.onclick = function () {
-					_this.callback('options', { visibleUnit: i });
+					_this2.callback('options', { visibleUnit: i });
 				};
 	
 				cont.appendChild(el);
@@ -1727,11 +1216,10 @@
 		}, {
 			key: 'putButtons',
 			value: function putButtons(selected, num) {
-				var _this2 = this;
+				var _this3 = this;
 	
 				var cont = document.createElement('div');
 				cont.id = 'buttons_cont';
-				document.body.appendChild(cont);
 	
 				this.setStyle(cont, { textAlign: 'center' });
 	
@@ -1741,42 +1229,65 @@
 				arr.push('HS');
 				arr.map(function (i) {
 	
-					var el = _this2.createElement(i, selected);
+					var el = _this3.createElement(i, selected);
 					cont.appendChild(el);
 				});
+				document.querySelector('#interactive_container').appendChild(cont);
 			}
 		}, {
 			key: 'putPlayPause',
 			value: function putPlayPause() {
-				var _this3 = this;
+				var _this4 = this;
 	
-				var btn = document.createElement('div');
-				btn.id = 'play';
-				btn.innerHTML = 'Play/Pause';
-				this.setStyle(btn, {
-					width: '100px',
-					margin: '20px auto',
-					cursor: 'pointer'
-				});
-				btn.onclick = function () {
-					_this3.callback('play');
+				document.querySelector('#play_btn').onclick = function () {
+					_this4.callback('play');
 				};
-	
-				document.body.appendChild(btn);
 			}
 		}, {
-			key: 'putPopulationNum',
-			value: function putPopulationNum(num) {
+			key: 'setPopulationNum',
+			value: function setPopulationNum(num) {
 	
-				var inf = document.createElement('div');
-				inf.id = 'num';
-				inf.innerHTML = 'Population: ' + num;
-				this.setStyle(inf, {
-					width: '100px',
-					margin: '20px auto'
-				});
+				document.querySelector('#population_num').innerHTML = 'Population: ' + num;
+			}
+		}, {
+			key: 'putOptions',
+			value: function putOptions(options, root_opt) {
+				var _this5 = this;
 	
-				document.body.appendChild(inf);
+				var pop_size = document.querySelector('#pop_size');
+				var num_win = document.querySelector('#num_win');
+				var mut_num = document.querySelector('#mut_num');
+				var mut_rate = document.querySelector('#mut_rate');
+				var select_fps = document.querySelector('#select_fps');
+				var speed = document.querySelector('#speed');
+				pop_size.value = options.populationSize;
+				num_win.value = options.numberOfWinners;
+				mut_num.value = options.genesToMutate;
+				mut_rate.value = options.mutationRate * 100;
+				select_fps.value = root_opt.FPS;
+				speed.value = root_opt.speed;
+				speed.onchange = function (e) {
+					_this5.callback('options', { speed: parseInt(e.target.value) });
+				};
+				select_fps.onchange = function (e) {
+					_this5.callback('options', { FPS: parseInt(e.target.value) });
+				};
+				pop_size.onchange = function (e) {
+					num_win.max = e.target.value;
+					if (num_win.value > e.target.value) {
+						num_win.value = e.target.value;
+					}
+					_this5.callback('form_options', { populationSize: e.target.value });
+				};
+				num_win.onchange = function (e) {
+					_this5.callback('form_options', { numberOfWinners: e.target.value });
+				};
+				mut_num.onchange = function (e) {
+					_this5.callback('form_options', { genesToMutate: e.target.value });
+				};
+				mut_rate.onchange = function (e) {
+					_this5.callback('form_options', { mutationRate: e.target.value / 100 });
+				};
 			}
 		}]);
 	
