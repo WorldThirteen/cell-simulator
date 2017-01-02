@@ -1,5 +1,8 @@
 import Vec2 from '../math/vec2';
-import Evolver from '../evolve';
+import Evolver from '../controllers/evolve';
+import History from '../controllers/history';
+import toMatrix from '../helpers/to_matrix';
+import Clone from '../helpers/clone';
 import SimulatorWorker from 'worker-loader!../workers/simulator_worker';
 
 export default class MainController {
@@ -10,6 +13,8 @@ export default class MainController {
 		this.ui = opts.ui;
 		this.ui.setCallback(::this.actionHandler);
 
+		this.history = new History();
+
 		this.generateFood();
 
 		this.options = {
@@ -17,7 +22,21 @@ export default class MainController {
 			populationSize: 10,
 			speed: 10,
 			FPS: 60,
-		}
+		};
+
+		this.initEvolver();
+
+		this.current = [];
+		this.workers = [];
+		this.status = 'started';
+		this.populationNum = 0;
+		this.prevFrame = 0;
+
+		this.init();
+
+	}
+
+	initEvolver(population) {
 
 		this.evolver = new Evolver({
 			populationSize: this.options.populationSize,
@@ -25,15 +44,7 @@ export default class MainController {
 			numberOfWinners: 3,
 			genesToMutate: 200,
 			mutationRate: 0.25
-		});
-
-		this.current = [];
-		this.workers = [];
-		this.status = 'paused';
-		this.populationNum = 0;
-		this.prevFrame = 0;
-
-		this.init();
+		}, population);
 
 	}
 
@@ -83,16 +94,6 @@ export default class MainController {
 
 	}
 
-	toMatrix(data, row) {
-
-		var matrix = [];
-		for (var i = 0; i < data.length; i += row) {
-			matrix.push(data.slice(i, i + row));
-		}
-		return matrix;
-
-	}
-
 	toUnits(population) {
 
 		return population.map(u => {
@@ -101,8 +102,8 @@ export default class MainController {
 				x: 400,
 				y: 200,
 				weights: [
-					this.toMatrix(u.slice(0, u.length / 2), 15),
-					this.toMatrix(u.slice(u.length / 2, u.length), 15),
+					toMatrix(u.slice(0, u.length / 2), 15),
+					toMatrix(u.slice(u.length / 2, u.length), 15),
 				]
 			};
 
@@ -130,14 +131,14 @@ export default class MainController {
 
 	evolve() {
 
-		this.evolver.evolve(this.current.map(u => u.score));
+		this.evolver.evolve(this.current.map(u => u.units[0].score));
 		this.populationNum++;
 
 	}
 
 	draw() {
 
-		const u = this.current[ this.getViewebleUnitIndex() ];
+		const u = this.current[ this.getViewableUnitIndex() ];
 		if (u) {
 			this.drawer.drawFrame(u);
 		}
@@ -177,7 +178,8 @@ export default class MainController {
 				type: 'INIT',
 				population: [u],
 				food,
-				delay: this.options.speed
+				delay: this.options.speed,
+				state: this.status,
 			});
 
 		});
@@ -188,10 +190,12 @@ export default class MainController {
 
 		if (this.current.map(u => u.end).indexOf(false) === -1) {
 
+			this.updateHistory();
 			this.evolve();
 			if (this.options.FPS === 0) {
 				this.updateUI();
 			}
+			this.ui.updateGraph(this.history.get('score'));
 			this.initRound();
 
 		}
@@ -203,7 +207,7 @@ export default class MainController {
 		this.ui.update({
 			units: this.current.map(u => u.units[0]),
 			visible: this.options.visibleUnit,
-			highlight: this.getViewebleUnitIndex(),
+			highlight: this.getViewableUnitIndex(),
 			populationNum: this.populationNum
 		});
 
@@ -248,17 +252,59 @@ export default class MainController {
 
 	setState(status) {
 
-		this.status = status;
+		if (status !== this.status) {
 
-		this.workers.map(w => {
+			this.status = status;
 
-			w.postMessage({ type: 'CHANGE_STATE', state: this.status });
+			this.workers.map(w => {
 
+				w.postMessage({ type: 'CHANGE_STATE', state: this.status });
+
+			});
+
+
+		}
+
+	}
+
+	updateHistory() {
+
+		this.history.push(Clone({
+			evolveParams: this.evolver.params,
+			population: this.evolver.population,
+			food: this.food,
+			score: this.current.map(u => u.units[0].score),
+			num: this.populationNum,
+		}));
+
+	}
+
+	toJSON() {
+
+		return JSON.stringify({
+			population: this.evolver.population,
+			populationNum: this.populationNum,
+			history: this.history.get(),
 		});
 
 	}
 
-	getViewebleUnitIndex() {
+	fromJSON(data) {
+
+		this.setState('paused');
+
+		const res = JSON.parse(data);
+
+		this.initEvolver(res.population);
+		this.populationNum = res.populationNum;
+		this.history.set(res.history);
+
+		this.initRound();
+		this.setState('started');
+
+	}
+
+	getViewableUnitIndex() {
 
 		if (this.options.visibleUnit === 'HS') {
 			const i = this.current

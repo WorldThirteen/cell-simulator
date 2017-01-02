@@ -1,3 +1,5 @@
+import Graphic from './graphic';
+
 class UIController {
 
 	constructor() {
@@ -16,6 +18,14 @@ class UIController {
 		this.putPlayPause();
 		this.setPopulationNum(obj.populationNum);
 		this.putOptions(obj.evolver.params, obj.options);
+		this.graph = new Graphic(document.querySelector('#svg-place'));
+		this.graph.draw('xy', [], { x: 300, y: 300 }, { min: 0, max: 100 });
+
+	}
+
+	updateGraph(data) {
+
+		this.graph.draw('xy', data, { x: 300, y: 300 }, { min: 0, max: 100 });
 
 	}
 

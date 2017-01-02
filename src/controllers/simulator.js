@@ -17,7 +17,7 @@ const NETWORK_PARAMS = (weights) => {
 			}
 		]
 	}
-}
+};
 
 export default class Simulator {
 

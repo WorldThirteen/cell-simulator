@@ -1,4 +1,4 @@
-import Simulator from '../simulator';
+import Simulator from '../controllers/simulator';
 
 class SimulatorWorker {
 
@@ -66,7 +66,9 @@ class SimulatorWorker {
 				if (typeof delay !== 'undefined') {
 					this.delay = delay;
 				}
-				this.start();
+				if (state === 'started') {
+					this.start();
+				}
 				break;
 
 			case 'CHANGE_DELAY':

@@ -5,7 +5,7 @@ export default class CanvasDrawer {
 		this.params = {
 			width: canvas.width,
 			height: canvas.height,
-		}
+		};
 
 		this.ctx = canvas.getContext('2d');
 

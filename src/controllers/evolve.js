@@ -1,13 +1,13 @@
 export default class Evolver {
 
-	constructor(params) {
+	constructor(params, population) {
 
 		this.params = {
 			...Evolver.DEFAULT_CONFIG,
 			...params,
 		}
 
-		this.population = null;
+		this.population = population;
 
 	}
 

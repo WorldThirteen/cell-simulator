@@ -1,6 +1,6 @@
-import CanvasDrawer from './drawer';
+import CanvasDrawer from './controllers/drawer';
 import MainController from './main';
-import UIController from './ui_controller';
+import UIController from './controllers/ui_controller';
 
 window.PARTS_NUM = 15;
 window.UNIT_RAD = 30;
